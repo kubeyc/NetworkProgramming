@@ -33,3 +33,9 @@ add_executable(07-tee
         07-tee.cpp)
 
 add_subdirectory(07)
+
+add_executable(select_tcp_echo_server
+        select_tcp_echo_server.cpp)
+
+add_executable(tcp_echo_client
+        tcp_echo_client.cpp)
