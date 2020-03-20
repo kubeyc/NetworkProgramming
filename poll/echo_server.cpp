@@ -27,7 +27,7 @@ int createServer(in_addr_t addr, in_port_t port, int backlog) {
     serverAddr.sin_port = port;
 
     int callRet;
-    callRet = bind(fd, (const sockaddr*)&serverAddr, sizeof(sockaddr_in));
+    callRet = bind(fd, (const sockaddr *) &serverAddr, sizeof(sockaddr_in));
     if (callRet == -1) {
         return callRet;
     }
@@ -38,17 +38,11 @@ int createServer(in_addr_t addr, in_port_t port, int backlog) {
     }
 }
 
-void addFd(pollfd *ev, int fd, int pos, short evs) {
-    ev[pos].fd = fd;
-    ev[pos].events = evs;
-    ev[pos].revents = 0;
-}
-
-bool checkAccept(pollfd *ev, int evSize, int& pos) {
+bool checkAccept(pollfd *ev, int evSize, int &pos) {
     if (ev[0].revents & POLLRDNORM) {
         sockaddr_in clientAddr;
         socklen_t clientAddrLen;
-        int clientFd = accept(ev[0].fd, (sockaddr*)&clientAddr, &clientAddrLen);
+        int clientFd = accept(ev[0].fd, (sockaddr *) &clientAddr, &clientAddrLen);
         if (clientFd == -1) {
             cout << "accept error: " << strerror(errno) << endl;
             return false;
@@ -84,32 +78,30 @@ void echo(pollfd *ev, int i) {
 int runServer(int serverFd) {
     nfds_t evSize = 1024;
     pollfd ev[evSize];
-    int evPos = 0;
+    int maxi = 0;
     int pollReady;
 
-    addFd(ev, serverFd, evPos, POLLRDNORM);
+    ev[0].fd = serverFd;
+    ev[0].events = POLLRDNORM;
+
     for (int i = 0; i < evSize; i++) {
         ev[i].fd = -1;
+        ev[i].events = 0;
+        ev[i].revents = 0;
     }
 
-    while(true) {
-        pollReady = poll(ev, evSize, -1);
+    while (true) {
+        pollReady = poll(ev, maxi + 1, -1);
         if (pollReady == -1) {
             cout << "poll error: " << strerror(errno) << endl;
             break;
         }
 
         cout << "poll ready: " << pollReady << endl;
-        if (!checkAccept(ev, evSize, evPos)) {
-            continue;
-        }
 
         if (--pollReady <= 0) {
             continue;
         }
-
-
-
     }
 }
 
