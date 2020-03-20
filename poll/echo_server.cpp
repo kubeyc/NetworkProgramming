@@ -36,71 +36,88 @@ int createServer(in_addr_t addr, in_port_t port, int backlog) {
     if (callRet == -1) {
         return callRet;
     }
-}
 
-bool checkAccept(pollfd *ev, int evSize, int &pos) {
-    if (ev[0].revents & POLLRDNORM) {
-        sockaddr_in clientAddr;
-        socklen_t clientAddrLen;
-        int clientFd = accept(ev[0].fd, (sockaddr *) &clientAddr, &clientAddrLen);
-        if (clientFd == -1) {
-            cout << "accept error: " << strerror(errno) << endl;
-            return false;
-        }
-
-        int i;
-        for (i = 1; i < evSize; i++) {
-            if (ev[i].fd < 0) {
-                ev[i].fd = clientFd;
-                ev[i].events = POLLRDNORM;
-            }
-        }
-
-        if (i == evSize) {
-            cout << "too many connect" << endl;
-            return false;
-        }
-
-        if (i > pos) {
-            pos = i;
-        }
-    }
-
-    return true;
-}
-
-void echo(pollfd *ev, int i) {
-    if (ev[i].revents & POLLRDNORM) {
-
-    }
+    return fd;
 }
 
 int runServer(int serverFd) {
-    nfds_t evSize = 1024;
-    pollfd ev[evSize];
+    nfds_t clientMax = 1024;
+    pollfd clients[clientMax];
     int maxi = 0;
     int pollReady;
 
-    ev[0].fd = serverFd;
-    ev[0].events = POLLRDNORM;
+    int bufSize = 2048;
+    char buf[bufSize];
+    memset(buf, '\0', bufSize);
+    int readN, writeN;
+    clients[0].fd = serverFd;
+    clients[0].events = POLLRDNORM;
 
-    for (int i = 0; i < evSize; i++) {
-        ev[i].fd = -1;
-        ev[i].events = 0;
-        ev[i].revents = 0;
+    for (int i = 1; i < clientMax; i++) {
+        clients[i].fd = -1;
+        clients[i].events = 0;
+        clients[i].revents = 0;
     }
 
     while (true) {
-        pollReady = poll(ev, maxi + 1, -1);
+        pollReady = poll(clients, maxi + 1, -1);
         if (pollReady == -1) {
             cout << "poll error: " << strerror(errno) << endl;
             break;
         }
 
         cout << "poll ready: " << pollReady << endl;
+        // 首先检测是否有新的连接到来
+        if (clients[0].revents & POLLRDNORM) {
+            sockaddr_in clientAddr;
+            socklen_t clientAddrLen;
+            int connFd = accept(serverFd, (sockaddr *) &clientAddr, &clientAddrLen);
+            if (connFd == -1) {
+                cout << "accept error: " << strerror(errno) << endl;
+                continue;
+            }
+            // 将新的连接加入到client
+            int i;
+            for (i = 1; i < clientMax; i++) {
+                if (clients[i].fd < 0) {
+                    clients[i].fd = connFd;
+                    clients[i].events = POLLRDNORM;
+                    break;
+                }
+            }
 
-        if (--pollReady <= 0) {
-            continue;
+            if (maxi < i) {
+                maxi = i;
+            }
+
+            if (--pollReady <= 0) {
+                continue;
+            }
+        }
+
+        // 否则处理客户端的写入
+        for (int i = 1; i <= maxi; i++) {
+            if (clients[i].revents & POLLRDNORM) {
+                readN = recv(clients[i].fd, buf, bufSize, 0);
+                if (readN < 0) {
+                    cout << "recv error: " << strerror(errno) << endl;
+
+                } else if (readN == 0) {
+                    maxi--;
+                    close(clients[i].fd);
+                    clients[i].fd = -1;
+                    clients[i].events = 0;
+                    clients[i].revents = 0;
+
+                } else {
+                    writeN = send(clients[i].fd, buf, readN, 0);
+                    if (writeN > 0) {
+                        memset(buf, '\0', readN);
+                    } else if (writeN < 0) {
+                        cout << "send error: " << strerror(errno) << endl;
+                    }
+                }
+            }
         }
     }
 }
